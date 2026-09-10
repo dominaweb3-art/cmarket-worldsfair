@@ -1,6 +1,6 @@
 import { router } from 'expo-router'
 import { AppButton } from '@/components/app-button'
-import { useAuth } from '@/components/auth/auth-provider'
+import { useMobileWallet } from '@wallet-ui/react-native-web3js'
 import { AppText } from '@/components/app-text'
 import { AppView } from '@/components/app-view'
 import { AppConfig } from '@/constants/app-config'
@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { showError } from '@/utils/show-error'
 
 export default function SignIn() {
-  const { signIn } = useAuth()
+  const { connect } = useMobileWallet()
   const [isSigningIn, setIsSigningIn] = useState(false)
 
   // Sign-in goes through the wallet, which can decline or fail the request.
@@ -21,7 +21,7 @@ export default function SignIn() {
     }
     setIsSigningIn(true)
     try {
-      await signIn()
+      await connect()
       // We only get here when sign-in succeeded, so it is safe to navigate.
       router.replace('/')
     } catch (error) {
