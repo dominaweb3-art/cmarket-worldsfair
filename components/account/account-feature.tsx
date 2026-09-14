@@ -1,262 +1,819 @@
 import { useMobileWallet } from '@wallet-ui/react-native-web3js'
+import { useRouter } from 'expo-router'
 import { PublicKey } from '@solana/web3.js'
 import { useCallback, useMemo, useState } from 'react'
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native'
+import { Alert, Pressable, RefreshControl, SafeAreaView, ScrollView, StyleSheet, View } from 'react-native'
 
 import { AppText } from '@/components/app-text'
-import { AppView } from '@/components/app-view'
-import { AppPage } from '@/components/app-page'
 import { AccountUiBalance } from '@/components/account/account-ui-balance'
-import { AccountUiTokenAccounts } from '@/components/account/account-ui-token-accounts'
+import { AccountUiUsdcBalance } from './account-ui-usdc-balance'
 import { useGetBalanceInvalidate } from '@/components/account/use-get-balance'
-import { useGetTokenAccountsInvalidate } from '@/components/account/use-get-token-accounts'
 import { WalletUiButtonConnect } from '@/components/solana/wallet-ui-button-connect'
 import { ellipsify } from '@/utils/ellipsify'
 
 import { AccountUiButtons } from './account-ui-buttons'
 
-const C10_ALLOCATION = [
-  { symbol: 'SOL', name: 'Solana', percent: 30, color: '#9945FF' },
-  { symbol: 'USDC', name: 'USD Coin', percent: 25, color: '#2775CA' },
-  { symbol: 'JitoSOL', name: 'Liquid staking', percent: 20, color: '#61D6A4' },
-  { symbol: 'ETH', name: 'Ethereum', percent: 15, color: '#627EEA' },
-  { symbol: 'BTC', name: 'Bitcoin', percent: 10, color: '#F7931A' },
-]
+type IndexKey = 'C3' | 'C5' | 'C10' | 'C20' | 'C50'
+
+type Asset = {
+  symbol: string
+  name: string
+  percent: number
+  color: string
+}
+
+type IndexConfig = {
+  label: IndexKey
+  title: string
+  description: string
+  active: boolean
+  assets: Asset[]
+}
+
+const DEFAULT_PUBLIC_KEY = new PublicKey('11111111111111111111111111111111')
+
+const INDEX_KEYS: IndexKey[] = ['C3', 'C5', 'C10', 'C20', 'C50']
+
+const INDEX_CONFIGS: Record<IndexKey, IndexConfig> = {
+  C3: {
+    label: 'C3',
+    title: 'Una canasta. Menos complejidad.',
+    description: 'Compra una sola canasta con exposición a varios activos del ecosistema Solana.',
+    active: true,
+    assets: [
+      {
+        symbol: 'SOL',
+        name: 'Solana',
+        percent: 50,
+        color: '#9945FF',
+      },
+      {
+        symbol: 'USDC',
+        name: 'USD Coin',
+        percent: 30,
+        color: '#2775CA',
+      },
+      {
+        symbol: 'JitoSOL',
+        name: 'Liquid staking',
+        percent: 20,
+        color: '#61D6A4',
+      },
+    ],
+  },
+
+  C5: {
+    label: 'C5',
+    title: 'Top 5 del mercado cripto.',
+    description: 'Esta canasta estará disponible próximamente.',
+    active: false,
+    assets: [],
+  },
+
+  C10: {
+    label: 'C10',
+    title: 'Top 10 del mercado cripto.',
+    description: 'Esta canasta estará disponible próximamente.',
+    active: false,
+    assets: [],
+  },
+
+  C20: {
+    label: 'C20',
+    title: 'Top 20 del mercado cripto.',
+    description: 'Esta canasta estará disponible próximamente.',
+    active: false,
+    assets: [],
+  },
+
+  C50: {
+    label: 'C50',
+    title: 'Top 50 del mercado cripto.',
+    description: 'Esta canasta estará disponible próximamente.',
+    active: false,
+    assets: [],
+  },
+}
+
+const CHART_BARS = [28, 34, 31, 44, 40, 52, 48, 61, 58, 69, 65, 78, 73, 84, 80, 94]
 
 export function AccountFeature() {
+  const router = useRouter()
   const { account } = useMobileWallet()
-  const [refreshing, setRefreshing] = useState(false)
 
-  // account.address es texto; aquí lo convertimos a PublicKey real
+  const [refreshing, setRefreshing] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState<IndexKey>('C3')
+  const accountAddress = account?.address
+
   const walletAddress = useMemo(() => {
-    if (!account?.address) {
+    if (!accountAddress) {
       return undefined
     }
 
-    return new PublicKey(account.address)
-  }, [account?.address])
+    try {
+      return new PublicKey(accountAddress)
+    } catch {
+      return undefined
+    }
+  }, [accountAddress])
+
+  const balanceAddress = walletAddress ?? DEFAULT_PUBLIC_KEY
+  const selectedConfig = INDEX_CONFIGS[selectedIndex]
 
   const invalidateBalance = useGetBalanceInvalidate({
-    address: walletAddress as PublicKey,
-  })
-
-  const invalidateTokenAccounts = useGetTokenAccountsInvalidate({
-    address: walletAddress as PublicKey,
+    address: balanceAddress,
   })
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
 
     try {
-      await Promise.all([
-        invalidateBalance(),
-        invalidateTokenAccounts(),
-      ])
+      await invalidateBalance()
     } finally {
       setRefreshing(false)
     }
-  }, [invalidateBalance, invalidateTokenAccounts])
+  }, [invalidateBalance])
+
+  const showComingSoon = (index: IndexKey) => {
+    Alert.alert(`${index} próximamente`, 'Primero terminaremos y probaremos C3 en Devnet.')
+  }
+
+  const showPurchaseInfo = () => {
+    if (!selectedConfig.active) {
+      showComingSoon(selectedConfig.label)
+      return
+    }
+
+    router.push('/account/buy')
+  }
+
+  const showWithdrawInfo = () => {
+    Alert.alert('Retirar', 'El retiro estará disponible después de completar la primera compra.')
+  }
 
   return (
-    <AppPage>
+    <SafeAreaView style={styles.screen}>
       {account && walletAddress ? (
-        <ScrollView
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void onRefresh()}
-            />
-          }
-          contentContainerStyle={styles.content}
-        >
-          <AppView style={styles.header}>
-            <AppText type="title">C10 Market</AppText>
+        <>
+          <ScrollView
+            style={styles.scroll}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor="#087F5B" />
+            }
+            contentContainerStyle={styles.content}
+          >
+            <View style={styles.header}>
+              <AppText style={styles.brand}>C Market</AppText>
 
-            <AppText style={styles.muted}>
-              Tu índice diversificado sobre Solana
-            </AppText>
-          </AppView>
+              <View style={styles.headerActions}>
+                <View style={styles.networkPill}>
+                  <View style={styles.onlineDot} />
+                  <AppText style={styles.networkText}>En Devnet</AppText>
+                </View>
 
-          <AppView style={styles.indexCard}>
-            <View style={styles.topRow}>
-              <View style={{ flex: 1 }}>
-                <AppText style={styles.eyebrow}>C10 INDEX</AppText>
+                <View style={styles.walletPill}>
+                  <View style={styles.walletAvatar} />
+                  <AppText style={styles.walletText}>{ellipsify(walletAddress.toBase58(), 5)}</AppText>
+                </View>
+              </View>
+            </View>
 
-                <AppText type="subtitle">
-                  Una canasta. Menos complejidad.
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.selectorContent}
+            >
+              {INDEX_KEYS.map((indexKey) => {
+                const index = INDEX_CONFIGS[indexKey]
+
+                return (
+                  <Pressable
+                    key={indexKey}
+                    onPress={() => {
+                      if (index.active) {
+                        setSelectedIndex(indexKey)
+                      } else {
+                        showComingSoon(indexKey)
+                      }
+                    }}
+                    style={[
+                      styles.indexPill,
+                      selectedIndex === indexKey && styles.indexPillSelected,
+                      !index.active && styles.indexPillDisabled,
+                    ]}
+                  >
+                    <AppText style={[styles.indexPillText, selectedIndex === indexKey && styles.indexPillTextSelected]}>
+                      {indexKey}
+                    </AppText>
+
+                    <AppText style={styles.indexPillCaption}>{index.active ? 'Activo' : 'Próximo'}</AppText>
+                  </Pressable>
+                )
+              })}
+            </ScrollView>
+
+            <View style={styles.positionCard}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardHeaderText}>
+                  <AppText style={styles.cardEyebrow}>{selectedConfig.label}</AppText>
+
+                  <AppText style={styles.cardTitle}>{selectedConfig.title}</AppText>
+
+                  <AppText style={styles.cardDescription}>{selectedConfig.description}</AppText>
+                </View>
+
+                <View style={styles.devnetBadge}>
+                  <AppText style={styles.devnetText}>DEVNET</AppText>
+                </View>
+              </View>
+
+              <View style={styles.valueHeader}>
+                <AppText style={styles.sectionLabel}>Saldo conectado</AppText>
+
+                <View style={styles.periodSelector}>
+                  <AppText style={styles.periodActive}>1D</AppText>
+                  <AppText style={styles.periodText}>1S</AppText>
+                  <AppText style={styles.periodText}>1M</AppText>
+                  <AppText style={styles.periodText}>Todo</AppText>
+                </View>
+              </View>
+
+              <View style={styles.balanceValue}>
+                <AccountUiBalance address={walletAddress} />
+                <AccountUiUsdcBalance address={walletAddress} />
+              </View>
+
+              <AppText style={styles.balanceNote}>Saldo disponible para probar C3 en Devnet</AppText>
+
+              <View style={styles.chart}>
+                <View style={styles.gridLineOne} />
+                <View style={styles.gridLineTwo} />
+                <View style={styles.gridLineThree} />
+
+                <View style={styles.chartBars}>
+                  {CHART_BARS.map((height, index) => (
+                    <View key={`${height}-${index}`} style={[styles.chartBar, { height }]} />
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.chartLabels}>
+                <AppText style={styles.chartLabel}>Inicio</AppText>
+                <AppText style={styles.chartLabel}>Ahora</AppText>
+              </View>
+
+              <View style={styles.statsRow}>
+                <View style={styles.statCard}>
+                  <AppText style={styles.statLabel}>Comprado</AppText>
+                  <AppText style={styles.statValue}>—</AppText>
+                </View>
+
+                <View style={styles.statCard}>
+                  <AppText style={styles.statLabel}>Ganancia</AppText>
+                  <AppText style={styles.statValue}>—</AppText>
+                </View>
+
+                <View style={styles.statCard}>
+                  <AppText style={styles.statLabel}>Rendimiento</AppText>
+                  <AppText style={styles.statValue}>—</AppText>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.exposureCard}>
+              <View style={styles.sectionHeader}>
+                <AppText style={styles.sectionTitle}>Composición objetivo</AppText>
+
+                <AppText style={styles.linkText}>Ver todos</AppText>
+              </View>
+
+              <View style={styles.exposureRow}>
+                {selectedConfig.assets.map((asset) => (
+                  <View key={asset.symbol} style={styles.exposureItem}>
+                    <View style={[styles.assetIcon, { backgroundColor: asset.color }]}>
+                      <AppText style={styles.assetIconText}>{asset.symbol.charAt(0)}</AppText>
+                    </View>
+
+                    <AppText style={styles.assetSymbol}>{asset.symbol}</AppText>
+
+                    <AppText style={styles.assetPercent}>{asset.percent}%</AppText>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.infoCard}>
+              <View style={styles.infoIcon}>
+                <AppText style={styles.infoIconText}>↗</AppText>
+              </View>
+
+              <View style={styles.infoText}>
+                <AppText style={styles.infoTitle}>Tu posición evolucionará</AppText>
+
+                <AppText style={styles.infoDescription}>
+                  Después de la primera compra podremos mostrar el valor, rendimiento y rebalanceo de tu canasta.
                 </AppText>
               </View>
-
-              <View style={styles.badge}>
-                <AppText style={styles.badgeText}>DEVNET</AppText>
-              </View>
             </View>
 
-            <AppText style={styles.muted}>
-              Asignación objetivo del MVP
-            </AppText>
+            <View style={styles.actionRow}>
+              <Pressable style={styles.primaryButton} onPress={showPurchaseInfo}>
+                <AppText style={styles.primaryButtonText}>Comprar {selectedConfig.label}</AppText>
+              </Pressable>
 
-            <View style={styles.allocationBar}>
-              {C10_ALLOCATION.map((asset) => (
-                <View
-                  key={asset.symbol}
-                  style={{
-                    flex: asset.percent,
-                    backgroundColor: asset.color,
-                  }}
-                />
-              ))}
+              <Pressable style={styles.secondaryButton} onPress={showWithdrawInfo}>
+                <AppText style={styles.secondaryButtonText}>Retirar</AppText>
+              </Pressable>
             </View>
 
-            <View style={styles.assetList}>
-              {C10_ALLOCATION.map((asset) => (
-                <View key={asset.symbol} style={styles.assetRow}>
-                  <View style={styles.assetName}>
-                    <View
-                      style={[
-                        styles.dot,
-                        { backgroundColor: asset.color },
-                      ]}
-                    />
+            <View style={styles.toolsCard}>
+              <AppText style={styles.toolsTitle}>Herramientas de wallet</AppText>
 
-                    <View>
-                      <AppText type="defaultSemiBold">
-                        {asset.symbol}
-                      </AppText>
+              <AccountUiButtons />
+            </View>
+          </ScrollView>
 
-                      <AppText style={styles.muted}>
-                        {asset.name}
-                      </AppText>
-                    </View>
-                  </View>
-
-                  <AppText type="defaultSemiBold">
-                    {asset.percent}%
-                  </AppText>
-                </View>
-              ))}
+          <View style={styles.bottomNav}>
+            <View style={styles.navItem}>
+              <AppText style={styles.navIconActive}>⌂</AppText>
+              <AppText style={styles.navTextActive}>Inicio</AppText>
             </View>
 
-            <AppText style={styles.previewNote}>
-              Vista previa de composición. La ejecución on-chain se añadirá en
-              el siguiente paso.
-            </AppText>
-          </AppView>
+            <View style={styles.navItem}>
+              <AppText style={styles.navIcon}>▥</AppText>
+              <AppText style={styles.navText}>Mercados</AppText>
+            </View>
 
-          <AppView style={styles.walletCard}>
-            <AppText style={styles.eyebrow}>
-              WALLET CONNECTED
-            </AppText>
+            <View style={styles.navItem}>
+              <AppText style={styles.navIcon}>＋</AppText>
+              <AppText style={styles.navText}>Comprar</AppText>
+            </View>
 
-            <AccountUiBalance address={walletAddress} />
+            <View style={styles.navItem}>
+              <AppText style={styles.navIcon}>▤</AppText>
+              <AppText style={styles.navText}>Actividad</AppText>
+            </View>
 
-            <AppText style={styles.muted}>
-              {ellipsify(walletAddress.toBase58(), 8)}
-            </AppText>
-          </AppView>
-
-          <AppView style={styles.tools}>
-            <AppText type="subtitle">Wallet tools</AppText>
-            <AccountUiButtons />
-          </AppView>
-
-          <AppView style={styles.tokens}>
-            <AccountUiTokenAccounts address={walletAddress} />
-          </AppView>
-        </ScrollView>
+            <View style={styles.navItem}>
+              <AppText style={styles.navIcon}>•••</AppText>
+              <AppText style={styles.navText}>Más</AppText>
+            </View>
+          </View>
+        </>
       ) : (
-        <AppView style={styles.connect}>
-          <AppText>Connect your wallet.</AppText>
+        <View style={styles.connect}>
+          <AppText style={styles.connectTitle}>Conecta tu wallet</AppText>
+
+          <AppText style={styles.connectDescription}>Usa Phantom en tu Seeker para comenzar.</AppText>
+
           <WalletUiButtonConnect />
-        </AppView>
+        </View>
       )}
-    </AppPage>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#F5F7FB',
+  },
+  scroll: {
+    flex: 1,
+  },
   content: {
-    paddingBottom: 32,
-    gap: 16,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 24,
+    gap: 14,
   },
   header: {
-    gap: 4,
-    paddingTop: 8,
-  },
-  indexCard: {
-    padding: 18,
-    gap: 14,
-    borderRadius: 22,
-    backgroundColor: '#20212A',
-  },
-  walletCard: {
-    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
-    borderRadius: 22,
-    backgroundColor: '#20212A',
   },
-  tools: {
+  brand: {
+    color: '#172D48',
+    fontSize: 26,
+    fontWeight: '800',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  networkPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: '#E3F7EF',
+  },
+  onlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0B9B69',
+  },
+  networkText: {
+    color: '#17684D',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  walletPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#E8F0FF',
+  },
+  walletAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#80B7FF',
+  },
+  walletText: {
+    color: '#24476F',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  selectorContent: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  indexPill: {
+    minWidth: 64,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#E8EDF3',
+  },
+  indexPillSelected: {
+    backgroundColor: '#172D48',
+  },
+  indexPillDisabled: {
+    opacity: 0.5,
+  },
+  indexPillText: {
+    color: '#203B5A',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  indexPillTextSelected: {
+    color: '#FFFFFF',
+  },
+  indexPillCaption: {
+    marginTop: 2,
+    color: '#708198',
+    fontSize: 8,
+  },
+  positionCard: {
+    padding: 18,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#18324E',
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 3,
     gap: 12,
   },
-  tokens: {
-    marginTop: 4,
-  },
-  topRow: {
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    gap: 10,
   },
-  eyebrow: {
-    color: '#9B9BA8',
+  cardHeaderText: {
+    flex: 1,
+    gap: 5,
+  },
+  cardEyebrow: {
+    color: '#6D7D91',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 1,
   },
-  muted: {
-    color: '#9B9BA8',
+  cardTitle: {
+    color: '#172D48',
+    fontSize: 23,
+    lineHeight: 27,
+    fontWeight: '800',
   },
-  badge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
+  cardDescription: {
+    color: '#667991',
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  devnetBadge: {
+    paddingHorizontal: 9,
     paddingVertical: 6,
-    backgroundColor: '#173D2C',
-  },
-  badgeText: {
-    color: '#67E8A5',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  allocationBar: {
-    height: 12,
-    width: '100%',
-    flexDirection: 'row',
-    overflow: 'hidden',
     borderRadius: 999,
+    backgroundColor: '#E3F7EF',
   },
-  assetList: {
-    gap: 12,
+  devnetText: {
+    color: '#087F5B',
+    fontSize: 9,
+    fontWeight: '800',
   },
-  assetRow: {
+  valueHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  assetName: {
+  sectionLabel: {
+    color: '#526A84',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  periodSelector: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 5,
+    padding: 3,
+    borderRadius: 999,
+    backgroundColor: '#F0F3F7',
+  },
+  periodActive: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    color: '#FFFFFF',
+    backgroundColor: '#087F5B',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  periodText: {
+    paddingHorizontal: 5,
+    color: '#718198',
+    fontSize: 10,
+  },
+  balanceValue: {
+    marginTop: -4,
+  },
+  balanceNote: {
+    marginTop: 8,
+    color: '#73849A',
+    fontSize: 11,
+  },
+  chart: {
+    position: 'relative',
+    height: 118,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
+    borderRadius: 12,
+    backgroundColor: '#FBFDFC',
+  },
+  gridLineOne: {
+    position: 'absolute',
+    top: 26,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#E6EFEA',
+  },
+  gridLineTwo: {
+    position: 'absolute',
+    top: 58,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#E6EFEA',
+  },
+  gridLineThree: {
+    position: 'absolute',
+    top: 90,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#E6EFEA',
+  },
+  chartBars: {
+    height: 110,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-around',
+    paddingHorizontal: 10,
+  },
+  chartBar: {
+    width: 7,
+    borderRadius: 8,
+    backgroundColor: '#63D5AC',
+    opacity: 0.85,
+  },
+  chartLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  chartLabel: {
+    color: '#8291A4',
+    fontSize: 10,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statCard: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E7ECF2',
+  },
+  statLabel: {
+    color: '#718198',
+    fontSize: 10,
+  },
+  statValue: {
+    marginTop: 4,
+    color: '#172D48',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  exposureCard: {
+    padding: 18,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#18324E',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+    gap: 16,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: {
+    color: '#172D48',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  linkText: {
+    color: '#356184',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  exposureRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  exposureItem: {
+    alignItems: 'center',
+    gap: 5,
+  },
+  assetIcon: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+  },
+  assetIconText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  assetSymbol: {
+    color: '#233D5B',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  assetPercent: {
+    color: '#718198',
+    fontSize: 10,
+  },
+  infoCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: '#E9FAF4',
+    borderWidth: 1,
+    borderColor: '#C8F0E2',
+  },
+  infoIcon: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 21,
+    backgroundColor: '#C8F1E3',
+  },
+  infoIconText: {
+    color: '#087F5B',
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  infoText: {
+    flex: 1,
+    gap: 4,
+  },
+  infoTitle: {
+    color: '#16543F',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  infoDescription: {
+    color: '#487967',
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  actionRow: {
+    flexDirection: 'row',
     gap: 10,
   },
-  dot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+  primaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 999,
+    backgroundColor: '#087F5B',
   },
-  previewNote: {
-    color: '#B9BAC4',
-    fontSize: 12,
-    lineHeight: 18,
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  secondaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 999,
+    backgroundColor: '#DDF4EC',
+  },
+  secondaryButtonText: {
+    color: '#087F5B',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  toolsCard: {
+    padding: 16,
+    gap: 12,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+  },
+  toolsTitle: {
+    color: '#172D48',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 8,
+    paddingBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E5EAF0',
+  },
+  navItem: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  navIconActive: {
+    color: '#087F5B',
+    fontSize: 21,
+    fontWeight: '800',
+  },
+  navIcon: {
+    color: '#7A899A',
+    fontSize: 20,
+  },
+  navTextActive: {
+    color: '#087F5B',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  navText: {
+    color: '#7A899A',
+    fontSize: 10,
   },
   connect: {
-    justifyContent: 'flex-end',
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    padding: 24,
+  },
+  connectTitle: {
+    color: '#172D48',
+    fontSize: 24,
+    fontWeight: '800',
+  },
+  connectDescription: {
+    color: '#718198',
+    textAlign: 'center',
+    fontSize: 14,
   },
 })

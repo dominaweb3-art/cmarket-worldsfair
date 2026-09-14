@@ -1,11 +1,9 @@
 import { createContext, type PropsWithChildren, use, useMemo } from 'react'
-import { SignInOutput, useMobileWallet } from '@wallet-ui/react-native-web3js'
-import { AppConfig } from '@/constants/app-config'
-import { useMutation } from '@tanstack/react-query'
+import { useMobileWallet } from '@wallet-ui/react-native-web3js'
 
 export interface AuthState {
   isAuthenticated: boolean
-  signIn: () => Promise<SignInOutput>
+  signIn: () => Promise<void>
   signOut: () => Promise<void>
 }
 
@@ -20,29 +18,21 @@ export function useAuth() {
   return value
 }
 
-function useSignInMutation() {
-  const { signIn } = useMobileWallet()
-
-  return useMutation({
-    mutationFn: async () =>
-      await signIn({
-        uri: AppConfig.uri,
-      }),
-  })
-}
-
 export function AuthProvider({ children }: PropsWithChildren) {
-  const { accounts, disconnect } = useMobileWallet()
-  const signInMutation = useSignInMutation()
+  const { accounts, connect, disconnect } = useMobileWallet()
 
   const value: AuthState = useMemo(
     () => ({
-      signIn: async () => await signInMutation.mutateAsync(),
+      // Authentication is wallet connection for this app. The previous
+      // sign-in flow requested a signed message against example.com and
+      // caused Phantom to reject it with MWA error -3.
+      signIn: async () => {
+        await connect()
+      },
       signOut: async () => await disconnect(),
       isAuthenticated: (accounts?.length ?? 0) > 0,
-      isLoading: signInMutation.isPending,
     }),
-    [accounts, disconnect, signInMutation],
+    [accounts, connect, disconnect],
   )
 
   return <Context value={value}>{children}</Context>

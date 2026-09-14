@@ -55,12 +55,8 @@ export function AccountUiTokenAccounts({ address }: { address: PublicKey }) {
               width: '100%',
             }}
           >
-            <AppText style={{ flex: 1, fontWeight: 'bold' }}>
-              Public Key
-            </AppText>
-            <AppText style={{ flex: 1, fontWeight: 'bold' }}>
-              Mint
-            </AppText>
+            <AppText style={{ flex: 1, fontWeight: 'bold' }}>Public Key</AppText>
+            <AppText style={{ flex: 1, fontWeight: 'bold' }}>Mint</AppText>
             <AppText
               style={{
                 flex: 1,
@@ -88,13 +84,9 @@ export function AccountUiTokenAccounts({ address }: { address: PublicKey }) {
                 borderBottomColor: '#ddd',
               }}
             >
-              <AppText style={{ flex: 1 }}>
-                {ellipsify(item.pubkey.toString())}
-              </AppText>
+              <AppText style={{ flex: 1 }}>{ellipsify(item.pubkey.toString())}</AppText>
 
-              <AppText style={{ flex: 1 }}>
-                {ellipsify(item.account.data.parsed.info.mint)}
-              </AppText>
+              <AppText style={{ flex: 1 }}>{ellipsify(item.account.data.parsed.info.mint)}</AppText>
 
               <View style={{ flex: 1, alignItems: 'flex-end' }}>
                 <AccountUiTokenBalance address={item.pubkey} />
